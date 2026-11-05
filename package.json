@@ -1,0 +1,58 @@
+{
+  "name": "npm2esm",
+  "version": "0.1.0",
+  "description": "Convert npm packages into browser-native ES modules.",
+  "type": "module",
+  "author": "wanggang <76527413@qq.com>",
+  "license": "MIT",
+  "keywords": [
+    "esm",
+    "import-map",
+    "importmap",
+    "esbuild",
+    "prebundle",
+    "bundler",
+    "browser",
+    "no-bundler"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nbaxp/npm2esm.git"
+  },
+  "homepage": "https://github.com/nbaxp/npm2esm#readme",
+  "bugs": {
+    "url": "https://github.com/nbaxp/npm2esm/issues"
+  },
+  "bin": {
+    "npm2esm": "./index.js"
+  },
+  "exports": {
+    ".": "./build.js",
+    "./strategies": "./strategies/index.js"
+  },
+  "files": [
+    "index.js",
+    "build.js",
+    "utils.js",
+    "strategies",
+    "tasks",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.js\"",
+    "prepublishOnly": "npm test"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "esbuild": "0.28.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

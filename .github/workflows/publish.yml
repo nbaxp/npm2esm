@@ -1,0 +1,140 @@
+# npm 发布工作流
+#
+# 正式发布：推送 v* Tag，自动测试、打包、发布 npm 并创建 GitHub Release。
+# 手动触发：默认 dry_run=true，只执行 npm publish --dry-run。
+# 手动正式发布：必须选择 v* Tag，并将 dry_run 设置为 false。
+#
+# 本包没有构建步骤（src 即发布内容），因此不包含 build 步骤。
+#
+# 前置配置：
+# npm 包 Settings → Trusted Publisher → GitHub Actions
+# 配置仓库、工作流文件名 publish.yml。
+#
+# 权限：
+# id-token: write 用于 npm OIDC。
+# contents: write 用于创建 GitHub Release。
+
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只执行 npm publish --dry-run，不真正发布'
+        type: boolean
+        default: true
+        required: true
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Check npm version
+        run: |
+          node --version
+          npm --version
+          node -e '
+          const [major, minor] = process.versions.node.split(".").map(Number);
+          if (major < 22 || (major === 22 && minor < 14)) {
+            throw new Error("Node.js 22.14.0 or later is required");
+          }
+          const [npmMajor, npmMinor] = require("child_process")
+            .execSync("npm --version", { encoding: "utf8" })
+            .trim().split(".").map(Number);
+          if (npmMajor < 11 || (npmMajor === 11 && npmMinor < 5)) {
+            throw new Error("npm CLI 11.5.1 or later is required");
+          }
+          '
+
+      - name: Validate manual publish ref
+        if: github.event_name == 'workflow_dispatch' && !inputs.dry_run
+        run: |
+          if [[ "$GITHUB_REF" != refs/tags/v* ]]; then
+            echo "::error::Manual publishing requires a v* tag."
+            exit 1
+          fi
+
+      - name: Verify tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          node -e '
+          const fs = require("node:fs");
+          const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          const tag = process.env.TAG.replace(/^v/, "");
+
+          if (pkg.version !== tag) {
+            console.error(
+              `Tag ${process.env.TAG} does not match package.json version ${pkg.version}`
+            );
+            process.exit(1);
+          }
+
+          console.log(`Version verified: ${tag}`);
+          '
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Pack tarball
+        id: pack
+        run: |
+          TARBALL="$(npm pack --silent)"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          echo "Created $TARBALL"
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarball
+          path: ${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+
+      - name: Publish (dry run)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: npm publish "$TARBALL" --dry-run
+
+      - name: Publish
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: npm publish "$TARBALL"
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run))
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          gh release create "$TAG" \
+            --generate-notes \
+            --title "$TAG" \
+            "$TARBALL"
