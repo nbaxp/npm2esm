@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 
 import { runCopyTask } from '../tasks/copy.js';
@@ -80,6 +80,32 @@ function resolveImportMapEntry(packageName, tasks, urlBase) {
 // 任务执行
 // ---------------------------------------------------------------------------
 
+// from 省略时按包 manifest 推导 ESM 入口：
+// exports 支持 '.' 键、顶层条件对象、纯字符串三种形态，
+// 取 import/default 条件，回退 module、main
+async function resolveEsmEntry(packageDir, packageName) {
+  const manifest = JSON.parse(await readFile(resolve(packageDir, 'package.json'), 'utf8'));
+
+  const exportsField = manifest.exports;
+  // '.' 键优先；没有 '.' 键且不含 './' 子路径键时，整个 exports 就是条件对象
+  const dot =
+    typeof exportsField === 'string'
+      ? exportsField
+      : exportsField?.['.'] ??
+        (Object.keys(exportsField ?? {}).some((key) => key.startsWith('./')) ? undefined : exportsField);
+
+  const entry =
+    (typeof dot === 'string' ? dot : dot?.import ?? dot?.default) ?? manifest.module ?? manifest.main;
+
+  if (typeof entry !== 'string' || entry === '') {
+    throw new Error(
+      `${packageName} 无法从 package.json 推导 ESM 入口（exports/module/main 均不可用），请显式声明 from`,
+    );
+  }
+
+  return entry;
+}
+
 async function runCopy(context, task, index) {
   const taskName = `${context.packageName} 任务${index + 1} (copy)`;
 
@@ -94,11 +120,14 @@ async function runBundle(context, task, index) {
   const { packageName, rootDir, srcDirAbs, packageDir, outputPackageDir } = context;
 
   // importmap 是条目推断的保留键，不得透传给 esbuild（Invalid option）
-  const { from, to: toRel, importmap: _importmap, ...rest } = task;
+  const { from: fromField, to: toRel, importmap: _importmap, ...rest } = task;
 
-  if (typeof from !== 'string' || from === '') {
+  if (fromField !== undefined && (typeof fromField !== 'string' || fromField === '')) {
     throw new Error(`${packageName} 的 from 必须是非空字符串`);
   }
+
+  // from 省略时按包 manifest 推导 ESM 入口（exports/module/main）
+  const from = fromField ?? (await resolveEsmEntry(packageDir, packageName));
 
   if (toRel !== undefined && typeof toRel !== 'string') {
     throw new Error(`${packageName} 的 to 必须是字符串`);
@@ -165,7 +194,7 @@ export default {
     for (const [index, task] of tasks.entries()) {
       if (task?.copy === true) {
         await runCopy(context, task, index);
-      } else if (task && typeof task.from === 'string' && task.from !== '') {
+      } else if (task && (task.from == null || (typeof task.from === 'string' && task.from !== ''))) {
         await runBundle(context, task, index);
       } else {
         throw new Error(`无法识别的任务：${JSON.stringify(task)}`);

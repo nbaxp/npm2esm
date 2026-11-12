@@ -233,6 +233,65 @@ test('configured：显式声明 external 时不做 peer 自动排除，peerDepen
   }
 });
 
+test('configured：esbuild 任务省略 from 时按 manifest 推导 ESM 入口', async () => {
+  const dir = await createTempDir();
+
+  try {
+    const source = 'export const n = 42;\n';
+
+    // 三种 exports 形态 + module 回退，都应推导出 dist/index.js
+    const variants = [
+      ['dot-import', { exports: { '.': { import: './dist/index.js', require: './dist/index.cjs' } } }],
+      ['top-conditional', { exports: { import: './dist/index.js', require: './dist/index.cjs' } }],
+      ['string', { exports: './dist/index.js' }],
+      ['module-fallback', { module: './dist/index.js' }],
+    ];
+
+    for (const [name, manifest] of variants) {
+      await writeFakePackage(dir, `entry-${name}`, { 'dist/index.js': source }, manifest);
+      await mkdir(join(dir, 'dist', `entry-${name}`), { recursive: true });
+
+      const result = await configuredStrategy.build(
+        createContext(dir, `entry-${name}`, [{ to: 'index.min.js' }]),
+      );
+      const bundle = await readFile(join(dir, 'dist', `entry-${name}`, 'index.min.js'), 'utf8');
+
+      assert.equal(result.success, true, name);
+      assert.ok(bundle.includes('42'), name);
+    }
+
+    // exports/module/main 均不可用时给出明确报错
+    await writeFakePackage(dir, 'entry-none', { 'dist/index.js': source }, {});
+    await mkdir(join(dir, 'dist', 'entry-none'), { recursive: true });
+
+    await assert.rejects(
+      () => configuredStrategy.build(createContext(dir, 'entry-none', [{ to: 'index.min.js' }])),
+      /无法从 package\.json 推导 ESM 入口/,
+    );
+
+    // 省略 from 与显式声明产物逐字节一致
+    await writeFakePackage(
+      dir,
+      'entry-parity',
+      { 'dist/index.js': source },
+      { exports: { '.': { import: './dist/index.js' } } },
+    );
+    await mkdir(join(dir, 'dist', 'entry-parity'), { recursive: true });
+
+    await configuredStrategy.build(createContext(dir, 'entry-parity', [{ to: 'auto.min.js' }]));
+    const autoBundle = await readFile(join(dir, 'dist', 'entry-parity', 'auto.min.js'), 'utf8');
+
+    await configuredStrategy.build(
+      createContext(dir, 'entry-parity', [{ from: 'dist/index.js', to: 'explicit.min.js' }]),
+    );
+    const explicitBundle = await readFile(join(dir, 'dist', 'entry-parity', 'explicit.min.js'), 'utf8');
+
+    assert.equal(autoBundle, explicitBundle);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // browser-esm 策略（vue / vue-router 等自动包的路径）
 // ---------------------------------------------------------------------------
