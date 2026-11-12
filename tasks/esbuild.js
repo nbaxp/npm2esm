@@ -130,9 +130,11 @@ async function getPeerExternals(srcDirAbs, entryPoints) {
 }
 
 export async function runEsbuildTask({ rootDir, srcDirAbs, entryPoints, outfile, options = {} }) {
-  // 入口包 peerDependencies 自动排除（包名 + 子路径通配），
-  // 与调用方显式 external 合并去重
-  const peerExternals = await getPeerExternals(srcDirAbs, entryPoints);
+  // 入口包 peerDependencies 自动排除（包名 + 子路径通配）。
+  // 任务显式声明了 external 时完全以声明为准，不做推断——
+  // 用于"聚合打包"场景：需要内联入口包的 peerDependencies（如 Tiptap 栈），
+  // 共享依赖由调用方在 external 里显式列出。
+  const peerExternals = options.external?.length > 0 ? [] : await getPeerExternals(srcDirAbs, entryPoints);
 
   const external = [...new Set([...(options.external ?? []), ...peerExternals])];
 

@@ -123,7 +123,7 @@ export default {
 - 字符串：等价于省略 `to` 的单个 esbuild 任务。
 - 对象：单个任务；`copy: true` 表示复制，否则走 esbuild。
 - 数组：按顺序执行多个任务，任一失败则整包失败。
-- esbuild 任务的 `to` 相对包输出目录，不允许 `../` 跳出；省略时默认 `index.min.js`。
+- esbuild 任务的 `to` 相对包输出目录，不允许 `../` 跳出；省略时默认 `index.min.js`。显式声明 `external` 时完全以声明为准（不自动排除入口包的 `peerDependencies`，适合把 peer 栈整体内联的聚合打包）；未声明时入口包的 `peerDependencies` 自动排除。
 - copy 任务的 `from` 相对包目录，省略 `to` 时按源相对路径复制（glob 则落入源所在目录）；`from` 支持单层 `*` 和 `{a,b}` glob，零匹配会报错。
 - `from` 可包含 `../`，用于引用工作区里的自定义 entry（例如 `../../entries/shiki/index.js`）。
 - `importmap: true` 可显式指定该任务作为包的 importmap 入口；未指定时取第一个 `.min.js` 输出。

@@ -189,6 +189,50 @@ test('configured：glob 零匹配必须失败，不静默产出残缺包', async
   }
 });
 
+test('configured：显式声明 external 时不做 peer 自动排除，peerDependencies 被内联', async () => {
+  const dir = await createTempDir();
+
+  try {
+    // agg-pkg 依赖 peer-lib（声明为 peer）；peer-lib 是独立可构建的小包
+    await writeFakePackage(dir, 'peer-lib', { 'index.js': 'export const v = 7;\n' }, { main: 'index.js' });
+    await writeFakePackage(dir, 'agg-pkg', {
+      'dist/index.js': 'import { v } from "peer-lib";\nexport const out = v;\n',
+    }, { peerDependencies: { 'peer-lib': '*' } });
+
+    await mkdir(join(dir, 'dist', 'agg-pkg'), { recursive: true });
+
+    // 显式 external（含一个无关包）→ peer-lib 不被自动排除，内联进产物
+    const inline = createContext(dir, 'agg-pkg', [
+      { from: 'dist/index.js', to: 'index.min.js', external: ['vue'] },
+    ]);
+
+    const inlineResult = await configuredStrategy.build(inline);
+
+    const inlineBundle = await readFile(join(inline.outputPackageDir, 'index.min.js'), 'utf8');
+
+    assert.equal(inlineResult.success, true);
+    assert.ok(inlineBundle.includes('7'));
+    assert.ok(!inlineBundle.includes('from"peer-lib"') && !inlineBundle.includes('from "peer-lib"'));
+
+    // 未声明 external → peer 自动排除生效，产物保留裸引用
+    await writeFakePackage(dir, 'agg2', {
+      'dist/index.js': 'import { v } from "peer-lib";\nexport const out = v;\n',
+    }, { peerDependencies: { 'peer-lib': '*' } });
+
+    await mkdir(join(dir, 'dist', 'agg2'), { recursive: true });
+
+    const externalized = createContext(dir, 'agg2', [{ from: 'dist/index.js', to: 'index.min.js' }]);
+
+    await configuredStrategy.build(externalized);
+
+    const externalBundle = await readFile(join(externalized.outputPackageDir, 'index.min.js'), 'utf8');
+
+    assert.match(externalBundle, /from\s*["']peer-lib["']/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // browser-esm 策略（vue / vue-router 等自动包的路径）
 // ---------------------------------------------------------------------------
