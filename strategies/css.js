@@ -191,9 +191,10 @@ export async function buildCssSubpaths(context) {
   const cssSubpaths = await collectCssSubpaths(packageName, srcDirAbs);
 
   for (const { subpath, fromConvention } of cssSubpaths) {
+    // 已是 .min.css 的不再追加（lookbehind 防止双重后缀）
     const outputName = fromConvention
       ? 'index.min.css'
-      : subpath.replace(/^dist\//i, '').replace(/\.css$/i, '.min.css');
+      : subpath.replace(/^dist\//i, '').replace(/(?<!\.min)\.css$/i, '.min.css');
 
     // 已是压缩产物（.min.css）直接复制，不重复编译；失败与编译分支一致：仅记录，不影响包整体
     if (subpath.toLowerCase().endsWith('.min.css')) {

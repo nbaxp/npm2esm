@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { extractLibEntries, formatImportMapEntries, injectImportMap } from '../build.js';
+import { extractLibEntries, formatImportMapEntries, injectImportMap } from '../importmap.js';
 import browserEsmStrategy from '../strategies/browser-esm.js';
 import configuredStrategy from '../strategies/configured.js';
 import esbuildStrategy from '../strategies/esbuild.js';
@@ -23,7 +23,7 @@ const devImportMap = isDev
   : {};
 const importMap = {
   imports: {
-    'vue': '/lib/vue/index.min.js',
+    'vue': '/_site/lib/vue/index.min.js',
     // __NPM2ESM_IMPORT_MAP__
     ...devImportMap,
   },
@@ -112,7 +112,7 @@ test('无模板时生成默认模板并写入条目与版本号', async () => {
   }
 });
 
-test('自定义 urlBase 时模板旧 /lib/ 值归一，硬编码键不重复插入', async () => {
+test('自定义 urlBase 时模板硬编码键不重复插入，产物 URL 注入版本号', async () => {
   const dir = await createTempDir();
 
   try {

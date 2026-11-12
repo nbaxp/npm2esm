@@ -2,12 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { resolve } from 'node:path';
 
-import {
-  resolveContainedDir,
-  resolveImportMapOptions,
-  resolveSkipPackages,
-  resolveUrlBase,
-} from '../build.js';
+import { resolveContainedDir, resolveSkipPackages, resolveUrlBase } from '../build.js';
 
 const CONFIG_PATH = '/tmp/npm2esm.config.js';
 
@@ -27,21 +22,6 @@ test('skipPackages 默认空集合，仅接受字符串数组', () => {
   assert.deepEqual([...resolveSkipPackages(['a', 'b'], CONFIG_PATH)], ['a', 'b']);
   assert.throws(() => resolveSkipPackages('a', CONFIG_PATH), /skipPackages 必须是字符串数组/);
   assert.throws(() => resolveSkipPackages(['a', 1], CONFIG_PATH), /skipPackages 必须是字符串数组/);
-});
-
-test('importMap 文件名可配置，默认 importmap.js / importmap.template.js', () => {
-  assert.deepEqual(resolveImportMapOptions({}, CONFIG_PATH), {
-    importMapFile: 'importmap.js',
-    importMapTemplate: 'importmap.template.js',
-  });
-  assert.deepEqual(
-    resolveImportMapOptions(
-      { importMapFile: 'map.js', importMapTemplate: 'map.template.js' },
-      CONFIG_PATH,
-    ),
-    { importMapFile: 'map.js', importMapTemplate: 'map.template.js' },
-  );
-  assert.throws(() => resolveImportMapOptions({ importMapFile: '' }, CONFIG_PATH), /importMapFile/);
 });
 
 test('包名不能跳出目标目录', () => {

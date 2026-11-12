@@ -69,16 +69,14 @@ export default {
 - `lib`（必填）：库目录，相对 `output`；缺失直接报错。
 - `urlBase`（可选，默认 `/lib/`）：浏览器侧库 URL 前缀，必须是字符串、以 `/` 开头且以 `/` 结尾、不含 `..`，否则报错。importmap 条目值直接由它拼接生成；它只影响 URL 字符串，不改变磁盘上的 `<output>/<lib>/` 布局，部署时需让该前缀指向该目录。
 - `skipPackages`（可选，默认空）：字符串数组，从 `dependencies` 派生的默认名单中排除这些包，也不为其生成 importmap 条目；CLI 位置参数显式指定的包仍强制构建。
-- `importMapFile`（可选，默认 `importmap.js`）：importmap 产物文件名，相对 `output`。
-- `importMapTemplate`（可选，默认 `importmap.template.js`）：importmap 模板文件名，与 config 同目录。
 - `packages`：按包名声明构建任务（见「配置 DSL」）；未声明的包走自动策略。
 
 config 不存在时按无配置继续，但会因缺少 `output` / `lib` 报错。
 
 ## 输出与 importmap
 
-1. 包产物写入 `<output>/<lib>/<package>/`；importmap 位于 `<output>/<importMapFile>`。
-2. 每次构建都重建 importmap：读取 config 同目录的 `importMapTemplate`，替换模板里的显式占位符；模板里硬编码的条目保留，同键不重复插入。模板与既有 importmap 都不存在时，使用内置默认模板生成 importmap 文件并打印提示。
+1. 包产物写入 `<output>/<lib>/<package>/`；importmap 位于 `<output>/importmap.js`。
+2. 每次构建都重建 importmap：读取 config 同目录的 `importmap.template.js`，替换模板里的显式占位符；模板里硬编码的条目保留，同键不重复插入（硬编码条目必须已使用配置的 `urlBase` 前缀）。模板与既有 importmap 都不存在时，使用内置默认模板生成 importmap 文件并打印提示。
 3. 条目来源是 `dependencies`（排除 `skipPackages`）加上本轮显式指定的包，均用策略的 `plan` 计算，构建失败的包不进表。条目按键名排序，非合法 JS 标识符的键加引号。
 4. config 包的产物落在子目录时，额外产出 `包名/` → `<urlBase>包名/` 前缀映射；`browser-esm` 策略同时产出 `index.min.js`（prod）与 `index.js`（dev）两条。
 5. 所有指向产物的 URL 追加 `?v=<version>-<内容哈希>`：版本取包清单的 `version`（读不到为 `0.0.0`），哈希取产物内容的 sha256 前 8 位，产物不变则哈希不变。目录前缀 URL（以 `/` 结尾）和已带 `v=` 的 URL 跳过；产物不存在时保留原 URL 并汇总警告。
@@ -120,7 +118,7 @@ export default {
 };
 ```
 
-- `output`、`lib`、`urlBase`、`skipPackages`、`importMapFile`、`importMapTemplate` 是保留键，不会被当作包名；按包名的任务统一放在 `packages` 下。
+- `output`、`lib`、`urlBase`、`skipPackages` 是保留键，不会被当作包名；按包名的任务统一放在 `packages` 下。
 - `packages` 下按包名声明构建任务；包不在 `packages` 中时走自动策略。
 - 字符串：等价于省略 `to` 的单个 esbuild 任务。
 - 对象：单个任务；`copy: true` 表示复制，否则走 esbuild。
@@ -160,7 +158,7 @@ await run('path/to/workspace', [], {
 2. `to` 不能跳出包输出目录。
 3. `--clear` 会清空整个 `lib`；即使同时指定包名，也会先清空，再只重建指定包，其它包不会自动恢复。
 4. Windows 上输出目录被占用时，删除会重试 3 次。
-5. 内置 `node:test` 测试，覆盖 CLI 参数、config 校验、importmap 生成与路径穿越防护：
+5. 内置 `node:test` 测试，覆盖 CLI 参数、config 校验、importmap 生成、三个构建策略、CSS subpath 收集、主流程端到端（含清理安全阀与失败汇总）与路径穿越防护：
 
 ```sh
 npm test
@@ -169,7 +167,7 @@ npm test
 ## 排错
 
 1. `工作区 ... 不存在或缺少 package.json`：`workspace` 参数指错了。
-2. `缺少 output` / `缺少 lib` / `urlBase ...` / `skipPackages ...` / `importMapFile ...`：config 字段缺失或不合法（报错信息会带上实际使用的 config 路径）。
+2. `缺少 output` / `缺少 lib` / `urlBase ...` / `skipPackages ...`：config 字段缺失或不合法（报错信息会带上实际使用的 config 路径）。
 3. `npm 包不存在`：目标工作区没有安装对应依赖，先在应用目录 `npm install`。
 4. `Cannot find package 'esbuild'`：本包依赖未安装完整，重新执行 `npm i npm2esm`。
 5. config 文件存在但报语法错误：本工具不会吞掉损坏的 config，修好或删除后重试。
@@ -177,9 +175,15 @@ npm test
 
 ## 发布说明
 
-`package.json` 中的 `repository` / `homepage` / `bugs` 按独立仓库形态指向 `https://github.com/nbaxp/npm2esm`；该仓库在首次发布时才会创建，当前代码仍位于主仓库的 `frontend/packages/npm2esm`。
+`package.json` 中的 `repository` / `homepage` / `bugs` 指向 `https://github.com/nbaxp/npm2esm`。
 
-发布由 `.github/workflows/publish.yml` 承载：推送 `v*` Tag 时测试、`npm pack`、`npm publish <tgz>` 并创建 GitHub Release；手动触发默认只做 `npm publish --dry-run`。
+发布由 `.github/workflows/publish.yml` 承载：推送 `v*` Tag 时校验 Tag 与 `package.json` 版本一致、测试、`npm pack`、`npm publish <tgz>`（npm OIDC Trusted Publisher，需在 npm 侧配置 GitHub Actions 为 Trusted Publisher）并创建 GitHub Release；手动触发默认只做 `npm publish --dry-run`，正式手动发布需选择 `v*` Tag 并将 `dry_run` 设为 `false`。
+
+发版步骤：
+
+1. 确认 `npm test` 全过。
+2. 更新 `package.json` 的 `version`（如 `npm version patch` / `minor` / `major`）。
+3. 提交并打同名 Tag（`v0.1.2` 形式）推送，工作流自动完成发布与 Release。
 
 ## 目录结构
 
@@ -187,6 +191,7 @@ npm test
 npm2esm/
 ├── index.js          # CLI
 ├── build.js          # 构建主流程
+├── importmap.js      # importmap 生成链（模板/条目合并/版本注入）
 ├── utils.js          # 纯函数
 ├── strategies/       # 策略
 ├── tasks/            # copy / esbuild 任务

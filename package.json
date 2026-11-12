@@ -33,6 +33,7 @@
   "files": [
     "index.js",
     "build.js",
+    "importmap.js",
     "utils.js",
     "strategies",
     "tasks",

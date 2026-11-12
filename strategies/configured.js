@@ -93,7 +93,8 @@ async function runCopy(context, task, index) {
 async function runBundle(context, task, index) {
   const { packageName, rootDir, srcDirAbs, packageDir, outputPackageDir } = context;
 
-  const { from, to: toRel, ...rest } = task;
+  // importmap 是条目推断的保留键，不得透传给 esbuild（Invalid option）
+  const { from, to: toRel, importmap: _importmap, ...rest } = task;
 
   if (typeof from !== 'string' || from === '') {
     throw new Error(`${packageName} 的 from 必须是非空字符串`);
