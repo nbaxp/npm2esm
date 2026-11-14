@@ -65,12 +65,18 @@ function resolveConfigPath(targetDir, explicitPath) {
   return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
 }
 
-// 浏览器侧库目录前缀：默认 /lib/；必须 / 开头结尾，禁止 .. 穿越
+// 浏览器侧库目录前缀：默认 /lib/；必须 / 或 ./ 开头、/ 结尾，禁止 .. 穿越
+// ./ 开头表示相对文档 base URL 解析，配合 HTML <base> 可适配根目录/子目录部署
 export function resolveUrlBase(value, configPath) {
   if (value === undefined) return DEFAULT_URL_BASE;
 
-  if (typeof value !== 'string' || !value.startsWith('/') || !value.endsWith('/') || value.split('/').includes('..')) {
-    throw new Error(`npm2esm 配置的 urlBase 必须以 / 开头、以 / 结尾且不含 ..（${configPath}）`);
+  if (
+    typeof value !== 'string' ||
+    !value.endsWith('/') ||
+    !(value.startsWith('/') || value.startsWith('./')) ||
+    value.split('/').includes('..')
+  ) {
+    throw new Error(`npm2esm 配置的 urlBase 必须以 / 或 ./ 开头、以 / 结尾且不含 ..（${configPath}）`);
   }
 
   return value;

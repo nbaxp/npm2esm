@@ -10,11 +10,14 @@ test('urlBase 默认值为 /lib/', () => {
   assert.equal(resolveUrlBase(undefined, CONFIG_PATH), '/lib/');
 });
 
-test('urlBase 必须是 / 开头结尾且不含 ..', () => {
+test('urlBase 必须是 / 或 ./ 开头结尾且不含 ..', () => {
   assert.equal(resolveUrlBase('/_site/lib/', CONFIG_PATH), '/_site/lib/');
-  assert.throws(() => resolveUrlBase('lib', CONFIG_PATH), /urlBase 必须以 \/ 开头/);
-  assert.throws(() => resolveUrlBase('/lib', CONFIG_PATH), /urlBase 必须以 \/ 开头/);
-  assert.throws(() => resolveUrlBase('/a/../lib/', CONFIG_PATH), /urlBase 必须以 \/ 开头/);
+  assert.equal(resolveUrlBase('./_site/lib/', CONFIG_PATH), './_site/lib/');
+  assert.throws(() => resolveUrlBase('lib', CONFIG_PATH), /urlBase 必须以 \/ 或 \.\//);
+  assert.throws(() => resolveUrlBase('/lib', CONFIG_PATH), /urlBase 必须以 \/ 或 \.\//);
+  assert.throws(() => resolveUrlBase('./lib', CONFIG_PATH), /urlBase 必须以 \/ 或 \.\//);
+  assert.throws(() => resolveUrlBase('/a/../lib/', CONFIG_PATH), /urlBase 必须以 \/ 或 \.\//);
+  assert.throws(() => resolveUrlBase('./../lib/', CONFIG_PATH), /urlBase 必须以 \/ 或 \.\//);
 });
 
 test('skipPackages 默认空集合，仅接受字符串数组', () => {
